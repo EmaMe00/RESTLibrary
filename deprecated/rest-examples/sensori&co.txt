@@ -1,0 +1,146 @@
+#!/bin/bash
+
+#provisioning a service group
+curl -iX POST 'http://localhost:4041/iot/services' \
+-H 'fiware-service: openiot' \
+-H 'fiware-servicepath: /' \
+-H 'Content-Type: application/json' \
+--data-raw '{
+    "services": [
+        {
+            "apikey": "testapikey",
+            "cbroker": "http://orion:1026",
+            "entity_type": "Device",
+            "resource": "/iot/d",
+            "attributes": [
+                {
+                    "object_id": "m", "name": "motion", "type": "Property"
+                },
+                {
+                    "object_id": "i", "name": "isbn", "type": "Property"
+                }
+            ],
+            "static_attributes": [
+                {
+                    "name": "category", "type": "Property", "value": "sensor"
+                },
+                {
+                    "name": "supportedProtocol", "type": "Property", "value": "ul20"
+                }
+            ]
+        }
+    ]
+}'
+
+#provisioning a motion sensor
+curl -L -X POST 'http://localhost:4041/iot/devices' \
+    -H 'fiware-service: openiot' \
+    -H 'fiware-servicepath: /' \
+    -H 'Content-Type: application/json' \
+--data-raw '{
+  "devices": [
+    {
+      "device_id": "motion001",
+      "entity_name": "urn:ngsi-ld:Device:motion001",
+      "entity_type": "Device",
+      "timezone": "Europe/Rome",
+      "attributes": [
+        {
+          "object_id": "m",
+          "name": "motion",
+          "type": "Property"
+        }
+      ],
+      "static_attributes": [
+        {
+          "name": "controlledAsset",
+          "type": "Relationship",
+          "value": "urn:ngsi-ld:Library:library001"
+        }
+      ]
+    }
+  ]
+}'
+
+#provisioning a book scanner sensor
+curl -L -X POST 'http://localhost:4041/iot/devices' \
+    -H 'fiware-service: openiot' \
+    -H 'fiware-servicepath: /' \
+    -H 'Content-Type: application/json' \
+--data-raw '{
+  "devices": [
+    {
+      "device_id": "scanner001",
+      "entity_name": "urn:ngsi-ld:Device:scanner001",
+      "entity_type": "Device",
+      "timezone": "Europe/Rome",
+      "attributes": [
+        {
+          "object_id": "i",
+          "name": "isbn",
+          "type": "Property"
+        }
+      ],
+      "static_attributes": [
+        {
+          "name": "controlledAsset",
+          "type": "Relationship",
+          "value": "urn:ngsi-ld:Library:library001"
+        }
+      ]
+    }
+  ]
+}'
+
+#simulate data sent by motion sensor
+curl -L -X POST 'http://localhost:7896/iot/d?k=testapikey&i=motion001' \
+    -H 'Content-Type: text/plain' \
+    --data-raw 'm|1'
+
+#simulate data sent by book scanner sensor
+curl -L -X POST 'http://localhost:7896/iot/d?k=testapikey&i=scanner001' \
+    -H 'Content-Type: text/plain' \
+    --data-raw 'i|1234567890'
+
+#get data from sensor
+curl -G -iX GET 'http://localhost:1026/ngsi-ld/v1/entities/urn:ngsi-ld:Device:motion001' \
+    -H 'fiware-service: openiot' \
+    -H 'fiware-servicepath: /' \
+    -H 'Link: <http://context/ngsi-context.jsonld>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"'
+    -d 'attrs=motion'
+
+#la subscription per venire notificati ogni volta che si prende un libro
+curl -L -X POST 'http://localhost:1026/ngsi-ld/v1/subscriptions/' \
+-H 'Content-Type: application/ld+json' \
+--data-raw '{
+  "description": "Notificami quando viene prelevato un libro",
+  "type": "Subscription",
+  "entities": [{"type": "Device"}],
+  "watchedAttributes": ["isbn"],
+  "notification": {
+    "format": "keyValues",
+    "endpoint": {
+      "uri": "http://sito:3000(porta)/test/test",
+      "accept": "application/json"
+    }
+  },
+   "@context": "http://context/ngsi-context.jsonld"
+}'
+
+#la subscription per venire notificati ogni volta che entra qualcuno 
+curl -L -X POST 'http://localhost:1026/ngsi-ld/v1/subscriptions/' \
+-H 'Content-Type: application/ld+json' \
+--data-raw '{
+  "description": "Notificami quando entra o esce qualcuno",
+  "type": "Subscription",
+  "entities": [{"type": "Device"}],
+  "watchedAttributes": ["motion"],
+  "notification": {
+    "format": "keyValues",
+    "endpoint": {
+      "uri": "http://sito:3000(porta)/test/test",
+      "accept": "application/json"
+    }
+  },
+   "@context": "http://context/ngsi-context.jsonld"
+}'
